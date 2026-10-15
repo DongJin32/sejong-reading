@@ -38,7 +38,7 @@
         .quick-btn:hover { background: #3182ce; color: white; border-color: #2b6cb0; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .quick-num { font-size: 1.05rem; margin-right: 8px; font-weight: bold; }
 
-        /* 워드 다운로드 전용 버튼 스타일 */
+        /* 워드 다운로드 버튼 스타일 */
         .download-btn-container { margin-top: 15px; }
         .download-btn { background-color: #27ae60; color: white; border: none; padding: 12px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 0.95rem; }
         .download-btn:hover { background-color: #219150; }
@@ -75,7 +75,6 @@
         let isAccessGranted = false;
         let chatConversationHistory = [];
 
-        // 대화 단계 제어를 위한 고도화된 시스템 프롬프트
         const SYSTEM_INSTRUCTION = `
 넌 세종특별자치시교육청의 '질문-탐구-성찰' 중심 교과탐구 독서교육 수석교사이자 최고 수준의 AI 수업 코파일럿이야.
 선생님이 현장에서 즉시 활용하고 제출할 수 있는 최고 수준의 [교과 탐구 독서 수업 프로그램 개발서]와 [학생용 활동지]를 함께 완성하는 것이 목표다.
@@ -93,4 +92,4 @@
 - 학생용 활동지에는 [생각 열기 질문] - [깊이 읽기 모둠 탐구] - [3문장 메타인지 성찰 (배운점, 느낀점, 삶에 적용할점)] 구조가 명확하게 반영되어야 한다.
 
 [선택지 제안 규칙]
-답변 맨 마지막 줄에는
+답변 맨 마지막 줄에는 교사가 편하게
