@@ -1,10 +1,170 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCRw-vi-yiqFJauqzzJ_1LL7TomyZuzxAc",
-  authDomain: "dongjin-reading.firebaseapp.com",
-  projectId: "dongjin-reading",
-  storageBucket: "dongjin-reading.firebasestorage.app",
-  messagingSenderId: "775006989506",
-  appId: "1:775006989506:web:4c0b1de399d01067fe9f5b",
-  measurementId: "G-8S101KRYR5"
-};
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세종형 교과탐구 질문독서 대화형 챗봇 by 김동진</title>
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; max-width: 850px; margin: 0 auto; padding: 20px; background: #f4f6f9; color: #333; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h1 { color: #2c3e50; font-size: 1.4rem; border-bottom: 2px solid #34495e; padding-bottom: 10px; margin-top: 0; }
+        button { background-color: #4A90E2; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #357ABD; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .hidden { display: none; }
+        
+        /* 채팅 UI */
+        #chat-history { height: 520px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 20px; border-radius: 10px; background: #ffffff; margin-bottom: 15px; display: flex; flex-direction: column; gap: 16px; }
+        .message { max-width: 88%; padding: 16px 20px; border-radius: 12px; line-height: 1.65; font-size: 0.95rem; word-break: break-word; white-space: pre-wrap; }
+        .user-msg { background: #4A90E2; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .ai-msg { background: #f8f9fa; color: #2c3e50; border: 1px solid #e2e8f0; align-self: flex-start; border-bottom-left-radius: 2px; }
+
+        /* 선택지 버튼 Style */
+        .quick-btn-container { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 10px; border-top: 1px dashed #cbd5e0; }
+        .quick-btn { display: flex; align-items: center; background: #ffffff; color: #2b6cb0; border: 1.5px solid #3182ce; padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; font-weight: 600; transition: all 0.2s; text-align: left; }
+        .quick-btn:hover { background: #3182ce; color: white; }
+        .quick-num { font-size: 1.05rem; margin-right: 8px; font-weight: bold; }
+
+        /* 워드 다운로드 버튼 Style */
+        .download-btn-container { margin-top: 15px; }
+        .download-btn { background-color: #27ae60; color: white; border: none; padding: 12px 18px; border-radius: 8px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+        .download-btn:hover { background-color: #219150; }
+
+        .chat-input-box { display: flex; gap: 10px; }
+    </style>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // 새로 개설한 dongjin-reading 파이어베이스 설정값
+        const firebaseConfig = {
+            apiKey: "AIzaSyCRw-vi-yiqFJauqzzJ_1LL7TomyZuzvQk",
+            authDomain: "dongjin-reading.firebaseapp.com",
+            projectId: "dongjin-reading",
+            storageBucket: "dongjin-reading.firebasestorage.app",
+            messagingSenderId: "775006989506",
+            appId: "1:775006989506:web:4c0b1de399d01067fe9694"
+        };
+
+        const GEMINI_API_KEY = "AQ.Ab8RN6L-dcxotCcYPp11wO8laRdnxWew8rFMJ75LVGHfxmvnEQ";
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        let currentUser = null;
+        let isAccessGranted = false;
+        let chatConversationHistory = [];
+
+        const SYSTEM_INSTRUCTION = `
+넌 세종특별자치시교육청의 '질문-탐구-성찰' 중심 교과탐구 독서교육 수석교사이자 최고 수준의 AI 수업 코파일럿이야.
+선생님이 현장에서 즉시 활용할 수 있는 최고 수준의 [교과 탐구 독서 수업 프로그램 개발서]와 [학생용 활동지]를 함께 완성하는 것이 목표다.
+
+[핵심 운영 법칙: 단계별 대화 설계 (Step-by-Step Inquiry)]
+절대로 한 번에 모든 결과물을 내놓으려 하지 마라. 선생님과 한 단계씩 질의응답을 주고받으며 수업을 디자인하라.
+
+- 1단계 (학년 및 단원 파악): 학년, 교과, 단원 핵심 개념을 질문하고 확인한다.
+- 2단계 (독서 주제 및 도서 추천): 해당 단원의 개념을 심화할 수 있는 추천 도서 2~3권(출판사 포함)과 핵심 탐구 주제를 제안하고 교사의 선택을 기다린다.
+- 3단계 (차시 및 질문 구상): 선정된 도서를 바탕으로 세종형 3단계(질문 생성 - 깊이 읽기/탐구 - 메타인지 성찰)에 맞춘 차시별 탐구 활동과 핵심 질문을 제안받고 교사 피드백을 반영한다.
+- 4단계 (최종 수업안 및 활동지 생성): 교사가 승인하면 완벽한 형태의 [교과 탐구 독서 수업 프로그램 개발서] 및 [학생용 활동지]를 가공 없이 즉시 문서화할 수 있도록 완벽하고 풍부하게 작성한다.
+
+[최종 결과물 양식 지침]
+- 수업 개발서에는 교과 성취기준, 단원 핵심 질문, 차시별 (질문-탐구-성찰) 세부 활동표가 상세히 포함되어야 한다.
+- 학생용 활동지에는 [생각 열기 질문] - [깊이 읽기 모둠 탐구] - [3문장 메타인지 성찰 (배운점, 느낀점, 삶에 적용할점)] 구조가 명확하게 반영되어야 한다.
+
+[선택지 제안 규칙]
+답변 맨 마지막 줄에는 교사가 편하게 다음 단계로 진행할 수 있는 선택지를 아래 형식으로 제공하라:
+[선택지: 옵션1 | 옵션2 | 옵션3]
+`;
+
+        window.onload = function() {
+            auth.onAuthStateChanged(function(user) {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById("user-email").innerText = user.email;
+                    document.getElementById("login-section").classList.add("hidden");
+
+                    if (!isAccessGranted) {
+                        document.getElementById("password-section").classList.remove("hidden");
+                        document.getElementById("app-section").classList.add("hidden");
+                    }
+                } else {
+                    currentUser = null;
+                    isAccessGranted = false;
+                    document.getElementById("login-section").classList.remove("hidden");
+                    document.getElementById("password-section").classList.add("hidden");
+                    document.getElementById("app-section").classList.add("hidden");
+                }
+            });
+        };
+
+        function handleLogin() {
+            auth.signInWithPopup(provider).catch(function(error) { alert("로그인 오류: " + error.message); });
+        }
+
+        function handleLogout() {
+            auth.signOut();
+        }
+
+        async function verifyPassword() {
+            const inputPassword = document.getElementById("access-password").value;
+            try {
+                const docSnap = await db.collection("settings").doc("access_code").get();
+                if (docSnap.exists && docSnap.data().password === inputPassword) {
+                    isAccessGranted = true;
+                    document.getElementById("password-section").classList.add("hidden");
+                    document.getElementById("app-section").classList.remove("hidden");
+                    initChat();
+                } else {
+                    alert("접근 승인 비밀번호가 올바르지 않습니다.");
+                }
+            } catch (err) {
+                alert("인증 오류: " + err.message);
+            }
+        }
+
+        function initChat() {
+            if (chatConversationHistory.length === 0) {
+                const welcomeMsg = "안녕하세요, 선생님! 📚 세종형 교과탐구 질문독서 AI 컨설턴트입니다.\n\n선생님과 한 단계씩 대화를 나누며 현장에서 바로 활용할 수 있는 명품 수업안과 활동지를 만들어 드릴게요.\n\n가장 먼저, 구상하고 계신 **[학년/학기]**와 **[교과 및 단원명]**을 알려주시겠어요?\n\n[선택지: 초등 3~4학년 수학/과학 단원 예시 | 초등 5~6학년 국어/사회 단원 예시 | 자유롭게 직접 입력하기]";
+                appendMessage("ai", welcomeMsg);
+                chatConversationHistory.push({ role: "user", parts: [{ text: "안녕, 넌 누구니?" }] });
+                chatConversationHistory.push({ role: "model", parts: [{ text: welcomeMsg }] });
+            }
+        }
+
+        const circNums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
+        function appendMessage(sender, rawText) {
+            const chatHistory = document.getElementById("chat-history");
+            const msgDiv = document.createElement("div");
+            msgDiv.classList.add("message", sender === "user" ? "user-msg" : "ai-msg");
+
+            if (sender === "user") {
+                msgDiv.innerText = rawText;
+            } else {
+                let mainText = rawText;
+                let options = [];
+                const optionMatch = rawText.match(/\[선택지:\s*(.*?)\]/);
+
+                if (optionMatch) {
+                    mainText = rawText.replace(optionMatch[0], "").trim();
+                    options = optionMatch[1].split("|").map(function(opt) { return opt.trim(); });
+                }
+
+                msgDiv.innerText = mainText;
+
+                if (options.length > 0) {
+                    const btnContainer = document.createElement("div");
+                    btnContainer.classList.add("quick-btn-container");
+                    
+                    options.forEach(function(optText, idx) {
+                        const btn = document.createElement("button");
+                        btn.classList.add("quick-btn");
+                        
+                        const numSpan = document.createElement("span");
+                        numSpan.classList
