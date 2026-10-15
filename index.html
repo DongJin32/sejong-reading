@@ -14,7 +14,7 @@
         .hidden { display: none; }
         .limit-notice { background: #ffeaa7; padding: 12px; border-radius: 8px; color: #d63031; font-weight: bold; margin-bottom: 15px; }
         
-        /* 채팅 전용 스타일 */
+        /* 채팅 UI 스타일 */
         #chat-history { height: 450px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; background: #fafafa; margin-bottom: 15px; display: flex; flex-direction: column; gap: 12px; }
         .message { max-width: 80%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 0.95rem; white-space: pre-wrap; word-break: break-word; }
         .user-msg { background: #4A90E2; color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
@@ -46,9 +46,8 @@
 
         let currentUser = null;
         let isAccessGranted = false;
-        let chatConversationHistory = []; // 대화 맥락 저장용 배열
+        let chatConversationHistory = [];
 
-        // 초기 시스템 프롬프트 (세종형 질문독서 컨설턴트 페르소나 설정)
         const SYSTEM_INSTRUCTION = `
 넌 세종특별자치시교육청의 '질문-탐구-성찰' 중심 교과탐구 독서교육 전문가이자 친절한 수업 설계 컨설턴트야.
 선생님과 대화를 나누며 학년, 교과 단원, 주제, 추천 도서를 함께 고민하고 최종적으로 [교과 탐구 독서 수업 프로그램 개발서]와 [학생용 활동지]를 완벽히 기획해주는 역할을 맡았어.
@@ -97,7 +96,7 @@
                     document.getElementById("password-section").classList.add("hidden");
                     document.getElementById("app-section").classList.remove("hidden");
                     await checkDailyLimit(currentUser.uid);
-                    initChat(); // 대화 시작
+                    initChat();
                 } else {
                     alert("접근 승인 비밀번호가 올바르지 않습니다.");
                 }
@@ -136,7 +135,6 @@
             await checkDailyLimit(uid);
         }
 
-        // 초기 인사 메시지
         function initChat() {
             if (chatConversationHistory.length === 0) {
                 const welcomeMsg = "안녕하세요, 선생님! 📚 세종형 교과탐구 질문독서 지원 AI 컨설턴트입니다.\n\n어떤 학년/교과 단원이나 주제로 질문독서 수업을 구상하고 계신가요? 편하게 물어봐 주시면 적합한 도서나 수업 방향을 함께 논의해 드릴게요!";
@@ -167,14 +165,16 @@
             sendBtn.disabled = true;
             sendBtn.innerText = "답변 작성 중...";
 
-            // 사용자 메시지 기록 추가
             chatConversationHistory.push({ role: "user", parts: [{ text: text }] });
 
             try {
-                // Gemini API Multi-turn Chat 호출
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                // x-goog-api-key 헤더 방식 적용
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': GEMINI_API_KEY
+                    },
                     body: JSON.stringify({
                         system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
                         contents: chatConversationHistory
@@ -182,15 +182,19 @@
                 });
 
                 const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message || "API 오류");
+                }
+
                 const aiReply = data.candidates[0].content.parts[0].text;
 
-                // AI 답변 기록 추가 및 화면 표시
                 chatConversationHistory.push({ role: "model", parts: [{ text: aiReply }] });
                 appendMessage("ai", aiReply);
 
                 await incrementUsage(currentUser.uid);
             } catch (error) {
-                alert("대화 답변 생성 중 오류가 발생했습니다.");
+                alert("대화 답변 생성 중 오류가 발생했습니다: " + error.message);
                 console.error(error);
             } finally {
                 sendBtn.innerText = "전송";
@@ -205,25 +209,20 @@
 </head>
 <body>
 
-    <!-- 1. 로그인 화면 -->
     <div id="login-section" class="card">
         <h1>📚 세종형 교과탐구 질문독서 AI 컨설턴트 by 김동진</h1>
         <p>선생님과 대화하며 수업을 함께 기획하는 대화형 AI 시스템입니다.</p>
         <button onclick="handleLogin()">구글 계정으로 로그인하기</button>
     </div>
 
-    <!-- 2. 비밀번호 입력 화면 -->
     <div id="password-section" class="card hidden">
         <h2>🔒 시스템 접근 승인</h2>
         <p>승인된 교사만 접근할 수 있도록 비밀번호를 요구합니다.</p>
-
-            <label>접근 승인 비밀번호</label>
-            <input type="password" id="access-password" placeholder="비밀번호를 입력하세요" style="margin-bottom: 10px;">
-            <button onclick="verifyPassword()">접근 승인 확인</button>
-
+        <label>접근 승인 비밀번호</label>
+        <input type="password" id="access-password" placeholder="비밀번호를 입력하세요" style="margin-bottom: 10px;">
+        <button onclick="verifyPassword()">접근 승인 확인</button>
     </div>
 
-    <!-- 3. 대화형 메인 앱 화면 -->
     <div id="app-section" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
             <span>👤 접속 교사: <strong id="user-email"></strong></span>
@@ -234,10 +233,8 @@
             ⚠️ 오늘의 일일 대화/수업안 생성 횟수(최대 5회)를 모두 소진하셨습니다.
         </div>
 
-        <!-- 채팅 대화창 영역 -->
         <div id="chat-history"></div>
 
-        <!-- 메시지 입력 영역 -->
         <div class="chat-input-box">
             <input type="text" id="user-input" placeholder="예: 초등 4학년 분수 단원에 어울리는 독서 주제와 책을 추천해줘" onkeypress="handleKeyPress(event)">
             <button id="send-btn" onclick="sendMessage()" style="width: 100px;">전송</button>
